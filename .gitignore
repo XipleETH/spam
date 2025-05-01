@@ -1,0 +1,26 @@
+# Archivos de entorno y configuración
+.env
+*.env
+
+# Imágenes generadas y QR
+generated_images/
+ETHQR.png
+
+# Lista de usuarios encontrados
+found_users.json
+
+# Ambiente virtual
+venv/
+env/
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+*.log
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db 
