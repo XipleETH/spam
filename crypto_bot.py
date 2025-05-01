@@ -192,18 +192,54 @@ def load_found_users():
 
 def generate_image(crypto, ticker):
     try:
+        print(f"Generando imagen para {crypto} (${ticker}) con modelo gpt-image-1...")
         response = openai.Image.create(
-            model="dall-e-3",
+            model="gpt-image-1",
             prompt=f"Create a unique and creative 3D robot character kneeling on the ground, facing right, holding a tablet that displays a {crypto} coin with the symbol ${ticker}. The robot should be in a begging pose, looking up and to the right with hopeful eyes. The tablet should be held with both hands, showing the coin clearly. Make it playful and cartoonish in 3D style, with a simple gradient background. The robot should have a distinctive and creative design - it could be a retro-futuristic robot, a cute chibi robot, a steampunk robot, a minimalist robot, or any other unique style, but always maintaining the pleading pose and tablet. The robot's body and head should be oriented towards the right side of the image. The design should be different each time, but always friendly and expressive. The image should be rendered in 3D with depth and dimension, focusing on the robot's pleading pose and the tablet display.",
             n=1,
-            size="1024x1024",
-            quality="standard",
-            style="vivid"
+            size="1024x1024"
         )
-        image_url = response['data'][0]['url']
+        
+        # Imprimir la estructura de la respuesta para depuración
+        print(f"Estructura de respuesta: {response}")
+        
+        # Manejar diferentes estructuras de respuesta
+        if 'data' in response and len(response['data']) > 0:
+            if 'url' in response['data'][0]:
+                image_url = response['data'][0]['url']
+            elif 'b64_json' in response['data'][0]:
+                # Manejar respuesta en base64 si es necesario
+                print("Recibiendo imagen en formato base64, guardando directamente...")
+                import base64
+                image_data = base64.b64decode(response['data'][0]['b64_json'])
+                
+                # Crear directorio si no existe
+                if not os.path.exists("generated_images"):
+                    os.makedirs("generated_images")
+                
+                # Generar nombre único para la imagen
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"generated_images/{crypto}_{ticker}_{timestamp}.png"
+                
+                # Guardar la imagen generada
+                with open(filename, "wb") as f:
+                    f.write(image_data)
+                
+                print(f"Imagen guardada directamente como: {filename}")
+                return filename  # Devolver directamente el nombre del archivo
+            else:
+                print(f"Formato de respuesta desconocido: {response['data'][0].keys()}")
+                return None
+        else:
+            print(f"Estructura de respuesta inesperada: {response.keys()}")
+            return None
+            
         return image_url
     except Exception as e:
         print(f"Error generating image: {str(e)}")
+        print(f"Tipo de error: {type(e)}")
+        if hasattr(e, 'response'):
+            print(f"Detalles de respuesta: {e.response}")
         return None
 
 def download_image(url, crypto, ticker):
@@ -304,7 +340,7 @@ def post_tweet(user=None, crypto=None, ticker=None):
         # Generate funny message about crypto
         print("Generando mensaje con GPT-4...")
         response = openai.ChatCompletion.create(
-            model="gpt-4",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a friendly bot that writes funny tweets asking for cryptocurrency donations in English. Do not use quotes in your responses."},
                 {"role": "user", "content": f"Generate a funny and friendly tweet asking {user} to donate some {crypto} (${ticker}). It should be short, use emojis, and be playful. Make it in English. Do not use quotes."}
@@ -314,13 +350,41 @@ def post_tweet(user=None, crypto=None, ticker=None):
         print(f"Mensaje generado: {message}")
         
         # Generate and upload image
-        print("Generando imagen con DALL-E...")
-        image_url = generate_image(crypto, ticker)
-        if image_url:
-            print("Imagen generada, descargando...")
-            image_path = download_image(image_url, crypto, ticker)
+        print("Generando imagen con modelo de IA...")
+        image_result = generate_image(crypto, ticker)
+        if image_result:
+            # Verificar si el resultado es una URL o un nombre de archivo local
+            if image_result.startswith("http"):
+                print("Imagen generada, descargando...")
+                image_path = download_image(image_result, crypto, ticker)
+            else:
+                print("Usando imagen generada localmente...")
+                image_path = image_result
+                
+                # Verificar si el archivo existe y tiene el QR superpuesto
+                try:
+                    # Cargar la imagen generada y el QR
+                    main_image = Image.open(image_path)
+                    qr_image = Image.open("ETHQR.png")
+                    
+                    # Redimensionar el QR a un tamaño más pequeño
+                    qr_size = 100
+                    qr_image = qr_image.resize((qr_size, qr_size))
+                    
+                    # Calcular posición para la esquina inferior izquierda
+                    position = (20, main_image.height - qr_size - 20)  # 20 píxeles desde los bordes
+                    
+                    # Pegar el QR sobre la imagen principal
+                    main_image.paste(qr_image, position)
+                    
+                    # Guardar la imagen final
+                    main_image.save(image_path)
+                    print("QR superpuesto en la imagen")
+                except Exception as e:
+                    print(f"Error al procesar imagen local: {str(e)}")
+                    
             if image_path:
-                print("Imagen descargada, subiendo a Twitter...")
+                print("Imagen lista, subiendo a Twitter...")
                 media_id = upload_media(image_path)
                 if media_id:
                     print("Imagen subida exitosamente")
